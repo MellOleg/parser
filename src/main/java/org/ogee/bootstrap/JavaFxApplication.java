@@ -2,11 +2,9 @@ package org.ogee.bootstrap;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.ogee.SpringContext;
-import org.ogee.application.service.ParserService;
+import org.ogee.ui.MainWindow;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -22,15 +20,11 @@ public class JavaFxApplication extends Application {
 
     @Override
     public void start(Stage stage) {
-        ParserService parserService = context.getBean(ParserService.class);
+        MainWindow mainWindow = context.getBean(MainWindow.class);
 
-        Button button = new Button("Запустить парсинг");
-        button.setOnAction(event ->parserService.testParse());
+        Scene scene = new Scene(mainWindow.createContent(), 1100, 650);
 
-        VBox root = new VBox(10, button);
-        Scene scene = new Scene(root, 800, 500);
-
-        stage.setTitle("Test Parsing");
+        stage.setTitle("Parser");
         stage.setScene(scene);
         stage.show();
     }
