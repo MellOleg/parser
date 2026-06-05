@@ -1,4 +1,4 @@
-package org.ogee.bootstrap;
+package org.ogee;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
