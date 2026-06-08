@@ -11,6 +11,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 public class JavaFxApplication extends Application {
 
     private ConfigurableApplicationContext context;
+    private MainWindow mainWindow;
 
     @Override
     public void init() {
@@ -22,7 +23,11 @@ public class JavaFxApplication extends Application {
     public void start(Stage stage) {
         mainWindow = context.getBean(MainWindow.class);
 
-        Scene scene = new Scene(mainWindow.createContent(), 1100, 650);
+        Scene scene = new Scene(mainWindow.createContent(), 1200, 700);
+
+        stage.setTitle("STALCRAFT Market Scanner");
+        stage.setScene(scene);
+        stage.show();
     }
 
     @Override
@@ -31,7 +36,8 @@ public class JavaFxApplication extends Application {
             mainWindow.shutdown();
         }
 
-        context.close();
+        if (context != null) {
+            context.close();
+        }
     }
-    private MainWindow mainWindow;
 }

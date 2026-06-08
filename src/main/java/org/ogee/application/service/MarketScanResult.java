@@ -49,7 +49,20 @@ public class MarketScanResult {
     public int getShownRows() {
         return rows.size();
     }
+
     public int getFilteredLots() {
         return foundLots - rows.size();
+    }
+
+    public int getRequestsPerCycle() {
+        return scannedItems * 2;
+    }
+
+    public int getRequestsPerMinute(int intervalSeconds) {
+        if (intervalSeconds <= 0) {
+            return 0;
+        }
+
+        return (int) Math.round(getRequestsPerCycle() * (60.0 / intervalSeconds));
     }
 }

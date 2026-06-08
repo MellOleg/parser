@@ -37,7 +37,8 @@ public class MarketScannerService {
             int lotsLimit,
             int historyDepth,
             double minProfitPercent,
-            long minTotalProfit
+            long minTotalProfit,
+            double auctionFeePercent
     ) {
         List<String> itemIds = watchlistService.getItemIds();
         Set<String> blacklistedIds = blacklistService.getBlacklistedItemIds();
@@ -46,6 +47,9 @@ public class MarketScannerService {
 
         int scannedItems = 0;
         int foundLots = 0;
+
+        System.out.println("Watchlist items: " + itemIds.size());
+        System.out.println("Blacklisted items: " + blacklistedIds.size());
 
         for (String itemId : itemIds) {
             if (blacklistedIds.contains(itemId)) {
@@ -63,12 +67,14 @@ public class MarketScannerService {
                 );
 
                 if (history.getPrices() == null || history.getPrices().isEmpty()) {
+                    System.out.println("No history for itemId=" + itemId);
                     continue;
                 }
 
                 long marketPricePerUnit = calculateMedianPricePerUnit(history.getPrices());
 
                 if (marketPricePerUnit <= 0) {
+                    System.out.println("Invalid market price for itemId=" + itemId);
                     continue;
                 }
 
@@ -80,6 +86,7 @@ public class MarketScannerService {
                 );
 
                 if (lotsResponse.getLots() == null || lotsResponse.getLots().isEmpty()) {
+                    System.out.println("No lots for itemId=" + itemId);
                     continue;
                 }
 
@@ -109,26 +116,36 @@ public class MarketScannerService {
                         continue;
                     }
 
+                    long sellAfterFeePerUnit = calculateSellAfterFee(
+                            marketPricePerUnit,
+                            auctionFeePercent
+                    );
+
                     double profitPercent = calculateProfitPercent(
                             pricePerUnit,
-                            marketPricePerUnit
+                            sellAfterFeePerUnit
                     );
 
                     long estimatedProfit = calculateEstimatedProfit(
                             lot.getAmount(),
                             pricePerUnit,
-                            marketPricePerUnit
+                            sellAfterFeePerUnit
                     );
+                    boolean hasProfit = estimatedProfit > 0;
+                    boolean passesPercentFilter = profitPercent >= minProfitPercent;
+                    boolean passesTotalProfitFilter = estimatedProfit >= minTotalProfit;
 
-                    if (profitPercent < minProfitPercent) {
+                    if (!hasProfit) {
                         continue;
                     }
 
-                    if (estimatedProfit < minTotalProfit) {
+                    if (!passesPercentFilter && !passesTotalProfitFilter) {
                         continue;
                     }
+                    String priority = calculatePriority(profitPercent, estimatedProfit);
 
                     rows.add(new MarketOpportunityRow(
+                            priority,
                             itemName,
                             itemId,
                             lot.getAmount(),
@@ -137,6 +154,7 @@ public class MarketScannerService {
                             marketPricePerUnit,
                             profitPercent,
                             estimatedProfit,
+                            sellAfterFeePerUnit,
                             lot.getEndTime()
                     ));
                 }
@@ -146,7 +164,31 @@ public class MarketScannerService {
             }
         }
 
-        rows.sort((a, b) -> Long.compare(b.getEstimatedProfit(), a.getEstimatedProfit()));
+        rows.sort((a, b) -> {
+            int priorityCompare = Integer.compare(
+                    getPriorityRank(b.getPriority()),
+                    getPriorityRank(a.getPriority())
+            );
+
+            if (priorityCompare != 0) {
+                return priorityCompare;
+            }
+
+            int percentCompare = Double.compare(
+                    b.getProfitPercent(),
+                    a.getProfitPercent()
+            );
+
+            if (percentCompare != 0) {
+                return percentCompare;
+            }
+
+            return Long.compare(
+                    b.getEstimatedProfit(),
+                    a.getEstimatedProfit()
+            );
+        });
+
 
         return new MarketScanResult(
                 rows,
@@ -155,6 +197,39 @@ public class MarketScannerService {
                 scannedItems,
                 foundLots
         );
+    }
+    private String calculatePriority(double profitPercent, long estimatedProfit) {
+        if (estimatedProfit >= 500_000 || profitPercent >= 100.0) {
+            return "S";
+        }
+
+        if (estimatedProfit >= 100_000 || profitPercent >= 50.0) {
+            return "A";
+        }
+
+        if (estimatedProfit >= 30_000 || profitPercent >= 20.0) {
+            return "B";
+        }
+
+        return "C";
+    }
+    private int getPriorityRank(String priority) {
+        return switch (priority) {
+            case "S" -> 4;
+            case "A" -> 3;
+            case "B" -> 2;
+            case "C" -> 1;
+            default -> 0;
+        };
+    }
+    private long calculateSellAfterFee(long marketPricePerUnit, double auctionFeePercent) {
+        double feeMultiplier = 1.0 - (auctionFeePercent / 100.0);
+
+        if (feeMultiplier <= 0) {
+            return 0;
+        }
+
+        return Math.round(marketPricePerUnit * feeMultiplier);
     }
 
     private long calculateMedianPricePerUnit(List<AuctionPriceDto> prices) {
@@ -182,12 +257,12 @@ public class MarketScannerService {
         return (unitPrices.get(middle - 1) + unitPrices.get(middle)) / 2;
     }
 
-    private double calculateProfitPercent(long pricePerUnit, long marketPricePerUnit) {
+    private double calculateProfitPercent(long pricePerUnit, long sellAfterFeePerUnit) {
         if (pricePerUnit <= 0) {
             return 0;
         }
 
-        double profit = marketPricePerUnit - pricePerUnit;
+        double profit = sellAfterFeePerUnit - pricePerUnit;
 
         return Math.round((profit / pricePerUnit * 100.0) * 100.0) / 100.0;
     }
@@ -195,9 +270,9 @@ public class MarketScannerService {
     private long calculateEstimatedProfit(
             int amount,
             long pricePerUnit,
-            long marketPricePerUnit
+            long sellAfterFeePerUnit
     ) {
-        return (marketPricePerUnit - pricePerUnit) * amount;
+        return (sellAfterFeePerUnit - pricePerUnit) * amount;
     }
 
     public int getWatchlistSize() {
