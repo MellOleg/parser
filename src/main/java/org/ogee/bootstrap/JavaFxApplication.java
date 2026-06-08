@@ -20,17 +20,18 @@ public class JavaFxApplication extends Application {
 
     @Override
     public void start(Stage stage) {
-        MainWindow mainWindow = context.getBean(MainWindow.class);
+        mainWindow = context.getBean(MainWindow.class);
 
         Scene scene = new Scene(mainWindow.createContent(), 1100, 650);
-
-        stage.setTitle("Parser");
-        stage.setScene(scene);
-        stage.show();
     }
 
     @Override
     public void stop() {
+        if (mainWindow != null) {
+            mainWindow.shutdown();
+        }
+
         context.close();
     }
+    private MainWindow mainWindow;
 }

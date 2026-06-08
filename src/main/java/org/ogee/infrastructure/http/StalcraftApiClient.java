@@ -1,4 +1,5 @@
 package org.ogee.infrastructure.http;
+import org.ogee.infrastructure.http.dto.AuctionLotsResponse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -69,6 +70,59 @@ public class StalcraftApiClient {
 
         } catch (IOException e) {
             throw new RuntimeException("Network/API parse error while calling STALCRAFT API", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Request interrupted", e);
+        }
+    }
+    public AuctionLotsResponse getAuctionLots(
+            String region,
+            String itemId,
+            int limit,
+            int offset
+    ) {
+        String clientId = System.getenv("STALCRAFT_CLIENT_ID");
+        String clientSecret = System.getenv("STALCRAFT_CLIENT_SECRET");
+
+        if (clientId == null || clientId.isBlank()) {
+            throw new IllegalStateException("STALCRAFT_CLIENT_ID is empty");
+        }
+
+        if (clientSecret == null || clientSecret.isBlank()) {
+            throw new IllegalStateException("STALCRAFT_CLIENT_SECRET is empty");
+        }
+
+        String url = BASE_URL + "/" + region + "/auction/" + itemId
+                + "/lots?limit=" + limit
+                + "&offset=" + offset;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Client-Id", clientId)
+                .header("Client-Secret", clientSecret)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException(
+                        "STALCRAFT API lots error: HTTP "
+                                + response.statusCode()
+                                + "\nBody: "
+                                + response.body()
+                );
+            }
+
+            return objectMapper.readValue(response.body(), AuctionLotsResponse.class);
+
+        } catch (IOException e) {
+            throw new RuntimeException("Network/API parse error while calling STALCRAFT lots API", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Request interrupted", e);
